@@ -6,9 +6,10 @@
 import numpy as np
 import pickle
 import matplotlib.pyplot as plt
+from AE import NN_classifier
+
 
 def generator(data, batch_size):
-
     starts = 0
     while True:
         stop = starts + batch_size
@@ -42,24 +43,31 @@ def generator_xy(arrays, batch_size):
         yield batches
 
 
-
 def load_data(path):
-    f = open(path,'rb')
+    f = open(path, 'rb')
     return pickle.load(f)
 
 
+def accuracy(x, y_true, weights):
 
-def accuracy(y_true, y_pred):
+    qW_0 = weights[0]
+    qW_1 = weights[1]
+    qb_0 = weights[2]
+    qb_1 = weights[3]
+
+    y_pred = NN_classifier(x, qW_0, qW_1, qb_0, qb_1)
+    y_pred = [np.argmax(i) for i in y_pred.eval()]
+
     correct = 0
     for i in range(len(y_true)):
         if y_true[i] == y_pred[i]:
             correct += 1
         else:
             pass
-    return correct/len(y_true)* 1.
+    return correct / len(y_true) * 1.
 
 
-def visulize(n,x_real, x_pred = None, show_pred = False):
+def visulize(n, x_real, x_pred=None, show_pred=False):
     # visulize the data set
     if not show_pred:
         plt.figure(figsize=(n, 4))
