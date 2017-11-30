@@ -1,49 +1,51 @@
 import numpy as np
-import edward as ed
 import tensorflow as tf
-import matplotlib.pyplot as plt
-import seaborn as sns
+import edward as ed
+from edward.models import Dirichlet
+from edward.models import Categorical
+from edward.models import Bernoulli
+from edward.models import Multinomial
 
+def generate_PSD(N, M, K):
+    alpha = np.ones(K) / K
+    eta = np.ones(2) / 2
+    theta = np.random.dirichlet(alpha, size=M)
+    beta = np.random.dirichlet(eta, size=(K, N))
+    DATA = []
+    for m in range(M):
+        Z_tmp = np.random.multinomial(1, theta[m], size=(2, N))
+        Z = np.zeros(shape=(2, N), dtype='int32')
+        X = np.zeros(N, dtype='int32')
+        for _ in range(2):
+            for n in range(N):
+                Z[_][n] = np.argmax(Z_tmp[_][n])
+                p = beta[Z[_][n]][n]
+                X[n] += 1 if np.random.random() <= p[0] else 0
+        DATA.append(X)
+    DATA = np.array(DATA)
+    Z = np.array(Z)
+    return DATA, Z, theta, beta
 
-from edward.models import Normal, Dirichlet, Categorical, Multinomial
-
-
-def build_toy_data(N):
-    K = 3
-    M = 10
-    N = 1000
-    alpha = np.absolute(np.random.normal(0.8,0.01,K))
-    beta = np.absolute(np.random.normal(0.1,0.01,M))
-    thetas = np.random.dirichlet(alpha,N)
-    phis = np.random.dirichlet(beta,K)
-    X = []
-    for theta in thetas:
-        topics = np.random.multinomial(1,theta)
-        print(topics)
-
-
-    print(theta)
-    return phis
-
-
-
-D = 4
-N = [11502, 213, 1523, 1351]
-K = 10
-V = 1000
-
-theta = Dirichlet(alpha=tf.zeros([D, K]) + 0.1)
-phi = Dirichlet(alpha=tf.zeros([K, V]) + 0.05)
-z = [[0] * np.max(N)] * D
-w = [[0] * np.max(N)] * D
-for d in range(D):
-    for n in range(N[d]):
-        z[d][n] = Categorical(pi=theta[d, :])
-        w[d][n] = Categorical(pi=phi[z[d][n], :])
-
-
-
-
-
-
-phi = build_toy_data(1)
+N = 10
+M = 10
+K = 3
+DATA, Z, theta, beta = generate_PSD(N, M, K)
+theta = Dirichlet(tf.zeros([M, K]) + 0.1)
+beta = Dirichlet(tf.zeros([K, N, 2]) + 0.05)
+Z = [[[0] * N] * 2] * M
+W_intermediate = [[[0] * N] * 2] * M
+W_ob = [[0] * M] * N
+for m in range(M):
+    for n in range(N):
+        Z[m][0][n] = Categorical(theta[m, :])
+        W_intermediate[m][0][n] = Bernoulli(beta[Z[m][0][n], :])
+        Z[m][1][n] = Categorical(theta[m, :])
+        W_intermediate[m][1][n] = Bernoulli(beta[Z[m][1][n], :])
+        W_ob[m][n] = tf.reduce_sum(tf.multiply((W_intermediate[m][0][n] + W_intermediate[m][1][n]), tf.constant([0,1], dtype='int32')))
+qtheta = Dirichlet(tf.zeros([M, K]) + 0.1)
+qbeta = Dirichlet(tf.zeros([K, N, 2]) + 0.05)
+data_dict = {}
+for m in range(M):
+    for n in range(N):
+        data_dict[W_ob[m][n]] = DATA[m][n]
+inference = ed.KLpq({qtheta: theta, qbeta :  beta}, data=data_dict)
